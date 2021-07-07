@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <POU Name="ForceLimiterFSM" Id="{343a6fe0-52b1-49d8-9ae1-c1152df0e24c}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK ForceLimiterFSM IMPLEMENTS i_actionHandler
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	forceLimiter_FSM : fb_FSM;
+	
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <LineIds Name="ForceLimiterFSM">
+      <LineId Id="9" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

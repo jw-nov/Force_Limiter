@@ -1,0 +1,286 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <POU Name="ParseJsonDoc" Id="{e06447dc-4921-4367-a675-dd86a4f2c336}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK ParseJsonDoc
+VAR
+	(* JSON *)
+	fbJson 			: FB_JsonDomParser();
+	fbJsonSax		: FB_JsonSaxReader();
+	jsonProp		: SJsonValue;
+	jsonValue		: SJsonValue;
+	bHasMember		: BOOL;
+  	sMessage 		: STRING(255) := '{"serialNumber":"G030PT028191AC4R","batteryVoltage":"1547mV","clickType":"SINGLE"}';
+	stReceivedData	: ST_ReceivedData;
+	
+	//sPath			: STRING := 'C:\FTP Test\JSON_Testing.json'; // PLC path
+	sPath			: STRING := 'C:\Users\wuj2\OneDrive - NOV Inc\Documents\_Projects\Cerberus\JSON_Testing.json'; // Local path for testing
+	bLoaded			: BOOL;
+	bLoad			: BOOL;
+	count			: INT;
+	sDoc			: STRING(255);
+	bDataLoaded		: BOOL;	// Data loaded flag
+	
+	bIsArray 		: BOOL;
+	jsonIterator	: SJsonValue;
+	jsonIteratorEnd	: SJsonValue;
+	sName 			: SJsonValue;
+	jsonArray 		: sJsonValue;
+	CopyJsonDoc 	: UDINT;
+	pJsonDoc 		: STRING(15000);
+	nJsonDoc 		: UDINT;
+	ReadJsonCount 	: INT;
+	MaxArrayCount 	: INT := 43;
+	JsonDateTime 	: BOOL;
+	nFT 			: FILETIME;
+	DecodeFileTime	: INT;
+	jsonDoc			: SJsonValue; //ULINT;
+	dateTime		: INT;
+	nDT 			: DATE_AND_TIME;
+	sDT				: STRING := '1611612069.019';
+	
+	i 				: USINT;
+	NumOfMember		: USINT; // The number of points to interpolate
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Reset data loaded flag
+IF bLoad = TRUE THEN
+	bDataLoaded := FALSE;
+END_IF
+
+(* Retrieve JSON content *)
+bLoaded := fbJson.LoadDocumentFromFile(sFile:=sPath , bExec:=bLoad);
+//sDoc := fbJson.GetDocument();
+CopyJsonDoc := fbJson.CopyDocument( pJsonDoc, SIZEOF(pJsonDoc));
+IF bLoaded = TRUE THEN
+	count 		:= count + 1	;
+	bDataLoaded := TRUE;
+END_IF
+
+jsonDoc := fbJson.ParseDocument(pJsonDoc);
+//CopyJsonDoc := fbJson.CopyDocument( pJsonDoc, SIZEOF(20000));
+
+// reading simple JSON array
+// Reading Project Info Array from JSON Document 
+		bHasMember := fbJson.HasMember(jsonDoc, 'ProjectInfo');
+IF (bHasMember) THEN
+	  bHasMember := FALSE;
+	  	jsonArray := fbJson.FindMember(jsonDoc, 'ProjectInfo');
+	  	bIsArray := fbJson.IsArray(jsonArray);
+	  	jsonIterator := fbJson.ArrayBegin(jsonArray);
+	  	sName:= fbJson.GetArrayValue(jsonIterator);
+	  
+	  // this way does it by member iteration
+	  	jsonProp := fbJson.MemberBegin(sName);
+	  	jsonValue := fbJson.GetMemberValue(jsonProp);
+	  	stReceivedData.ProjectName := fbJson.GetString(jsonValue);
+	  
+	  	jsonProp := fbJson.FindMember(sName, 'UTCUnixDateTime');
+	  	//stReceivedData.UTCUnixDateTime := fbJson.GetString(jsonProp);
+	  	JsonDateTime := fbJsonSax.DecodeDateTime(sDT);
+	  	jsonProp := fbJson.FindMember(sName, 'UpperPercent');
+	  	stReceivedData.UpperPercent := fbJson.GetDouble(jsonProp);
+	  
+	  	jsonProp := fbJson.FindMember(sName, 'LowerPercent');
+	  	stReceivedData.LowerPercent := fbJson.GetDouble(jsonProp);
+	  
+	  // this way does it by looking for a specific member
+	  //jsonProp := fbJson.FindMember(sName, 'UpperPercent');
+//stReceivedData.UpperPercent := fbJson.GetDouble(jsonProp);
+	  
+	END_IF
+
+// Reading Units from JSON Document 
+		bHasMember := fbJson.HasMember(jsonDoc, 'Units');
+IF (bHasMember) THEN
+	  	bHasMember := FALSE;
+	  	jsonArray := fbJson.FindMember(jsonDoc, 'Units');
+	  	bIsArray := fbJson.IsArray(jsonArray);
+	  	jsonIterator := fbJson.ArrayBegin(jsonArray);
+	  	sName	   := fbJson.GetArrayValue(jsonIterator);
+	  
+	  // this way does it by member iteration
+	  	jsonProp := fbJson.MemberBegin(sName);
+	  	jsonValue := fbJson.GetMemberValue(jsonProp);
+	  	stReceivedData.uDepth := fbJson.GetString(jsonValue);
+	  
+	  	jsonProp := fbJson.FindMember(sName, 'uDepth');
+	  	stReceivedData.uDepth := fbJson.GetString(jsonProp);
+	  
+	  	jsonProp := fbJson.FindMember(sName, 'uRIH_SurfaceWt_CatastrophicBuckling');
+	  	stReceivedData.uRIH_SurfaceWt_CatastrophicBuckling := fbJson.GetString(jsonProp);
+	  
+	  	jsonProp := fbJson.FindMember(sName, 'uRIH_SurfaceWt_FrictionPlus');
+	  	stReceivedData.uRIH_SurfaceWt_FrictionPlus := fbJson.GetString(jsonProp);
+	  
+	  	jsonProp := fbJson.FindMember(sName, 'uRIH_SurfaceWt');
+	  	stReceivedData.uRIH_SurfaceWt_FrictionPlus := fbJson.GetString(jsonProp);
+	  
+	  	jsonProp := fbJson.FindMember(sName, 'uRIH_SurfaceWt_FrictionNgtv');
+	  	stReceivedData.uRIH_SurfaceWt_FrictionNgtv := fbJson.GetString(jsonProp);
+	  
+	  	jsonProp := fbJson.FindMember(sName, 'uRIH_SurfaceWt_FrictionNgtv');
+	  	stReceivedData.uRIH_SurfaceWt_FrictionNgtv := fbJson.GetString(jsonProp);
+	  
+	  	jsonProp := fbJson.FindMember(sName, 'uRIH_SurfaceWt_FrictionNgtv');
+	  	stReceivedData.uRIH_SurfaceWt_FrictionNgtv := fbJson.GetString(jsonProp);
+	  
+	  	jsonProp := fbJson.FindMember(sName, 'uPOOH_SurfaceWt_FrictionNgtv');
+	  	stReceivedData.uPOOH_SurfaceWt_FrictionNgtv := fbJson.GetString(jsonProp);
+	  
+	   	jsonProp := fbJson.FindMember(sName, 'uPOOH_SurfaceWt');
+	  	stReceivedData.uPOOH_SurfaceWt := fbJson.GetString(jsonProp);
+	  
+	   	jsonProp := fbJson.FindMember(sName, 'uPOOH_SurfaceWt_FrictionPlus');
+	  	stReceivedData.uPOOH_SurfaceWt_FrictionPlus := fbJson.GetString(jsonProp);
+	  
+	   	jsonProp := fbJson.FindMember(sName, 'uPOOH_SurfaceWt_Yield');
+	  	stReceivedData.uPOOH_SurfaceWt_Yield := fbJson.GetString(jsonProp);
+
+END_IF
+
+
+
+//FOR ReadJsonCount := 1 TO MaxArrayCount  BY 1 DO
+bHasMember := fbJson.HasMember(jsonDoc, 'FrictionData');
+	
+IF (bHasMember) THEN
+	  	bHasMember := FALSE;
+	  	jsonArray := fbJson.FindMember(jsonDoc, 'FrictionData');
+	  	jsonIterator := fbJson.ArrayBegin(jsonArray);
+		jsonIteratorEnd := fbJson.ArrayEnd(jsonArray);
+		i := 1;
+	WHILE jsonIterator <> jsonIteratorEnd DO
+		sName := fbJson.GetArrayValue(jsonIterator);
+
+	  	bIsArray := fbJson.IsArray(jsonArray);
+	  	sName	   := fbJson.GetArrayValue(jsonIterator);
+	  
+	  	jsonProp := fbJson.MemberBegin(sName);
+	  	jsonValue := fbJson.GetMemberValue(jsonProp);
+	  	stReceivedData.Depth[i] := fbJson.GetDouble(jsonValue);
+	  
+	  	jsonProp := fbJson.FindMember(sName, 'RIH_SurfaceWt_CatastrophicBuckling');
+	  	stReceivedData.RIH_SurfaceWt_CatastrophicBuckling[i] := fbJson.GetDouble(jsonProp);  
+	  
+	  	jsonProp := fbJson.FindMember(sName, 'RIH_SurfaceWt_FrictionPlus');
+	  	stReceivedData.RIH_SurfaceWt_FrictionPlus[i] := fbJson.GetDouble(jsonProp);
+
+	  	jsonProp := fbJson.FindMember(sName, 'RIH_SurfaceWt');
+	  	stReceivedData.RIH_SurfaceWt[i] := fbJson.GetDouble(jsonProp);
+	  
+	  	jsonProp := fbJson.FindMember(sName, 'RIH_SurfaceWt_FrictionNgtv');
+	  	stReceivedData.RIH_SurfaceWt_FrictionNgtv[i] := fbJson.GetDouble(jsonProp);
+	  
+	  	jsonProp := fbJson.FindMember(sName, 'POOH_SurfaceWt_FrictionNgtv');
+	  	stReceivedData.POOH_SurfaceWt_FrictionNgtv[i] := fbJson.GetDouble(jsonProp);
+	  
+	  	jsonProp := fbJson.FindMember(sName, 'POOH_SurfaceWt');
+	  	stReceivedData.POOH_SurfaceWt[i] := fbJson.GetDouble(jsonProp);
+	  
+	  	jsonProp := fbJson.FindMember(sName, 'POOH_SurfaceWt_FrictionPlus');
+	  	stReceivedData.POOH_SurfaceWt_FrictionPlus[i] := fbJson.GetDouble(jsonProp);
+	  
+	  	jsonProp := fbJson.FindMember(sName, 'POOH_SurfaceWt_Yield');
+	  	stReceivedData.POOH_SurfaceWt_Yield[i] := fbJson.GetDouble(jsonProp);
+
+	  	jsonIterator := fbJson.NextArray(jsonIterator);
+		
+		IF i < 50 THEN
+			i := i + 1;
+		END_IF		
+		
+	END_WHILE
+	NumOfMember := i - 1;  
+	
+END_IF
+
+
+
+]]></ST>
+    </Implementation>
+    <Property Name="CerberusData" Id="{0c89023f-e0e0-4b14-992f-a508d3c7c5fc}">
+      <Declaration><![CDATA[PROPERTY PUBLIC CerberusData : ST_ReceivedData]]></Declaration>
+      <Get Name="Get" Id="{5acb9f40-90e3-4653-93e7-9e42d9d2494f}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[CerberusData := stReceivedData;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="JsonDataLoaded" Id="{ce6e15ae-81b7-4239-a35e-a712efca271c}">
+      <Declaration><![CDATA[PROPERTY PUBLIC JsonDataLoaded : BOOL]]></Declaration>
+      <Get Name="Get" Id="{dedfc064-38c4-4bc7-ae8c-d1d09b4bd381}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[JsonDataLoaded := bDataLoaded;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <Property Name="loadJsonData" Id="{13c8e67e-a605-4acd-8ac8-dd172f8f18e2}">
+      <Declaration><![CDATA[PROPERTY PUBLIC loadJsonData : BOOL]]></Declaration>
+      <Get Name="Get" Id="{42e91be3-044a-447c-b5fa-f06b134c3bd9}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[loadJsonData := bLoad;]]></ST>
+        </Implementation>
+      </Get>
+      <Set Name="Set" Id="{24baa43a-b877-42a2-a73b-fe31f1f8fc70}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[bLoad := loadJsonData;]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <Property Name="numOfPoints" Id="{f418cbfb-e6da-47bc-ad4c-56839104e144}">
+      <Declaration><![CDATA[PROPERTY PUBLIC numOfPoints : USINT]]></Declaration>
+      <Get Name="Get" Id="{423abd9b-49ff-4db1-84b3-e50425bfc15f}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[numOfPoints := NumOfMember;]]></ST>
+        </Implementation>
+      </Get>
+    </Property>
+    <LineIds Name="ParseJsonDoc">
+      <LineId Id="843" Count="0" />
+      <LineId Id="846" Count="2" />
+      <LineId Id="845" Count="0" />
+      <LineId Id="578" Count="5" />
+      <LineId Id="849" Count="0" />
+      <LineId Id="584" Count="93" />
+      <LineId Id="757" Count="0" />
+      <LineId Id="678" Count="35" />
+      <LineId Id="760" Count="2" />
+      <LineId Id="758" Count="0" />
+      <LineId Id="714" Count="1" />
+      <LineId Id="801" Count="0" />
+      <LineId Id="716" Count="3" />
+      <LineId Id="9" Count="0" />
+    </LineIds>
+    <LineIds Name="ParseJsonDoc.CerberusData.Get">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="ParseJsonDoc.JsonDataLoaded.Get">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="ParseJsonDoc.loadJsonData.Get">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="ParseJsonDoc.loadJsonData.Set">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="ParseJsonDoc.numOfPoints.Get">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

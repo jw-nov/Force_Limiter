@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <DUT Name="ForceLimiterFsmEvent" Id="{647f7759-8191-4966-96a4-39120b20ccf7}">
+    <Declaration><![CDATA[TYPE ForceLimiterFsmEvent :
+(
+	FsmEvent_MAX_IS_ZERO := 0,
+	FsmEvent_CERBURUS_DATA_LOADED,
+	FsmEvent_WEIGHT_SNUB_IS_LOW,
+	FsmEvent_WEIGHT_PULL_IS_HIGH,	
+	FsmEvent_WEIGHT_RIH_IS_LOW,
+	FsmEvent_WEIGHT_POOH_IS_HIGH,
+	FsmEvent_CLEAR_ALARM,	
+	FsmEvent_RIH_ENABLED,
+	FsmEvent_POOH_ENABLED,
+	NUM_FsmEvents	
+) BYTE;
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

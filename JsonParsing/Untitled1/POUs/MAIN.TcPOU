@@ -1,0 +1,251 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <POU Name="MAIN" Id="{2d0244dd-a724-4696-9621-c9e514a9e62a}" SpecialFunc="None">
+    <Declaration><![CDATA[(***********************************************************************
+	Project:  Smart Injector
+	Copyright (c) 2021 NOV AACD
+	9720 Beechnut St
+	Houston, TX  77036
+	Phone: 936-777-6200
+	Programmer: Mark Chandler <MDC>
+	
+	--------------------------------------------------------------------
+	This software is the confidential and proprietary information of
+	NOV AACD.("Confidential Information").  You shall not disclose such
+	Confidential Information and shall use it only in accordance with
+	the terms of the license agreement you entered into with NOV AACD.
+	--------------------------------------------------------------------
+	
+	Code Name: 	MAIN
+	Purpose:	Main PRG for Smart Injector
+	
+	Input values: NONE
+	Output Values: NONE
+	Revision: 0.1
+	
+	NOTES
+
+	Jun 16 2021 - JW
+	Added 'LinearInterpolation' FB for Cerberus data linear interpolation
+	Added public properties to 'ParseJsonDoc' FB For accessing the Cererus data
+	
+	Mar 29 2021 - MDC
+	MAIN complete for now
+	Alarms System patched up with a fix in the library
+	Testing of basic "Drivers" almost complete - need AO and encoder
+	Prepped older code for deletion by removing from compilation, will delete after drivers finished
+	I/O setup for testing only
+	
+	Mar 2 2021 - MDC
+	Basic Methods, Structs, GVLs set up to support compilation for MAIN
+	Security code omitted for now
+	Most code ported from Wago
+	Alarms need work
+	 
+
+	Feb 8 2021 - MDC
+	Starting point for Smart Injector based on Ideal Frac Code and NOV Wiki
+	https://wiki.nov.com/pages/viewpage.action?spaceKey=AACD&title=AACDRD-888+-+Cruise+Control+Project+Requirements
+	Most basic code remains from Ideal Frac. Any Modbus or NSA references have been removed.
+
+****************************************************************************)
+
+PROGRAM MAIN
+VAR
+//////////////FTP Test Function Call//////////////////////////////////////////
+	FTP_Test : FTP_to_Beckhoff;
+	ParseJsonDoc1 : ParseJsonDoc ;
+
+/////////////Linear Interpolation Call/////////////////////////////////////////
+	receivedData						: ST_ReceivedData;
+	Depth								: ARRAY [1..50] OF LREAL;
+	RIH_SurfaceWt_CatastrophicBuckling 	: ARRAY [1..50] OF LREAL;
+	RIH_SurfaceWt_FrictionPlus 			: ARRAY [1..50] OF LREAL;
+	RIH_SurfaceWt 						: ARRAY [1..50] OF LREAL;
+	RIH_SurfaceWt_FrictionNgtv 			: ARRAY [1..50] OF LREAL;
+	POOH_SurfaceWt_FrictionNgtv 		: ARRAY [1..50] OF LREAL;
+	POOH_SurfaceWt 						: ARRAY [1..50] OF LREAL;
+	POOH_SurfaceWt_FrictionPlus 		: ARRAY [1..50] OF LREAL;
+	POOH_SurfaceWt_Yield				: ARRAY [1..50] OF LREAL;
+
+	StartFTP		: BOOL;
+	LoadJsonData	: BOOL;
+	JsonDataLoaded  : BOOL;
+	CerberusData1	: LinearInterpolation;	
+	CerberusData2	: LinearInterpolation;
+	actualDepth		: LREAL;	// Actual depth value
+	RIH_SurfaceWtLP : LREAL;	// Calculated rih surface weight 
+	POOH_SurfaceWtLP: LREAL;	// Calculated pooh surface weight
+	RIH_CriticalWtLP: LREAL; 	// Calculated rih critical weight
+	POOH_CriticalWtLP: LREAL;	// Calculated pooh surface weight
+	
+	
+	Calculated		: BOOL;		// Output is calculated
+	Error			: BOOL;		// X-values sequence is wrong
+	BelowLower 		: BOOL;		// Input value is below lower range
+	OverUpper  		: BOOL;		// Input value is over upper range
+	
+	// Force Limiter Controls
+	forceLimiter1		: ForceLimiter;
+	// INPUT
+	rih					: BOOL;		// Run in hole
+	pooh				: BOOL;		// Pull out of hole
+	cruiseControl		: BOOL; 	// Cruise control mode
+	autoMill			: BOOL;		// Auto mill mode
+	cerberusDataLoaded 	: BOOL;		// Cerberus data loaded
+	surfaceWeight		: LREAL;	// Actual surface weight (lbs)	
+	maxSnub				: LREAL; 	// Max Sbub (in negative lbs)
+	maxPull				: LREAL;	// Max Pull (lbs)
+	criticalWeightRih	: LREAL;	// RIH critical weight (Cerburus Catastrophic Buckling, in negative lbs)
+	criticalWeightPooh	: LREAL;	// POOH critical weight ( Cerburus 80% pipe yield force, lbs)
+	exitAutoPercent		: LREAL:= 5.0;		// If surface weight exceed the Max Snub/Pull value by %, then exit automation mode
+	exitAutoTiming		: TIME := T#10S;	// If surface weight exceed the Max Snub/Pull value over an interval, then exit automation mode		
+	// OUTPUT
+	surfaceWeightLow	: BOOL;		// Warning if surface weight is below the Max Snub
+	surfaceWeightHigh	: BOOL;		// Warning if surface weight is over the Max Pull	
+	reduceForce			: BOOL;		// Fast stop while POOH, or run at slow speed while RIH
+	exitAuto			: BOOL;		// Exit automation if surface weight exceed the Max Snub/Pull values by percentage or over an interval	
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Develop Security Code AT a later DATE  - Mar 2 2021 <MDC>	
+// Commissioning Code Generation	
+(*	CommissionTrigger(CLK:= xCommission OR gstProcessData.PlcCommissionTrigger);
+	IF (CommissionTrigger.Q) THEN
+		WriteCommissionCode();
+	END_IF *)
+	
+// Function Block Call
+FTP_Test.Start := StartFTP;
+FTP_Test(); 
+
+// Function Block Call 
+ParseJsonDoc1.loadJsonData := LoadJsonData;
+ParseJsonDoc1();
+LoadJsonData := ParseJsonDoc1.loadJsonData;
+
+// Implement Linear Interpolation for Cerberus Data
+JsonDataLoaded						:= ParseJsonDoc1.JsonDataLoaded;
+receivedData 						:= ParseJsonDoc1.CerberusData;
+Depth 								:= receivedData.Depth;
+RIH_SurfaceWt_CatastrophicBuckling 	:= receivedData.RIH_SurfaceWt_CatastrophicBuckling;
+RIH_SurfaceWt_FrictionPlus			:= receivedData.RIH_SurfaceWt_FrictionPlus;
+RIH_SurfaceWt						:= receivedData.RIH_SurfaceWt;
+RIH_SurfaceWt_FrictionNgtv			:= receivedData.RIH_SurfaceWt_FrictionNgtv;
+POOH_SurfaceWt_FrictionNgtv			:= receivedData.POOH_SurfaceWt_FrictionNgtv;
+POOH_SurfaceWt						:= receivedData.POOH_SurfaceWt;
+POOH_SurfaceWt_FrictionPlus			:= receivedData.POOH_SurfaceWt_FrictionPlus;
+POOH_SurfaceWt_Yield				:= receivedData.POOH_SurfaceWt_Yield;
+
+IF ParseJsonDoc1.numOfPoints >= 2 AND ParseJsonDoc1.numOfPoints <= 50 THEN
+	CerberusData1(lrX := actualDepth, 
+				 arrX := Depth, 
+		   	    arrY1 := RIH_SurfaceWt, 
+		        arrY2 := POOH_SurfaceWt, 
+	     usiNumOfElem := ParseJsonDoc1.numOfPoints, 
+			     lrY1 => RIH_SurfaceWtLP, 
+			     lrY2 => POOH_SurfaceWtLP, 
+		        bCalc => Calculated, 
+			     bErr => Error, 
+	      bLowerLimit => BelowLower, 
+	      bUpperLimit => OverUpper);
+	
+	CerberusData2(lrX := actualDepth, 
+				 arrX := Depth, 
+		   	    arrY1 := RIH_SurfaceWt_CatastrophicBuckling, 
+		        arrY2 := POOH_SurfaceWt_Yield, 
+	     usiNumOfElem := ParseJsonDoc1.numOfPoints, 
+			     lrY1 => RIH_CriticalWtLP, 
+			     lrY2 => POOH_CriticalWtLP);	  
+		  
+END_IF
+
+// Implement Force Limiter Controls
+forceLimiter1(Rih  				:= rih,
+			  Pooh 				:=pooh,
+			  CruiseControl 	:= cruiseControl,
+			  AutoMill 			:= autoMill,
+			  CerberusDataLoaded:= JsonDataLoaded,
+			  SurfaceWeight		:= surfaceWeight,
+			  MaxSnub			:= maxSnub,
+			  MaxPull   		:= maxPull,
+			  CriticalWeightRih := RIH_CriticalWtLP,
+			  CriticalWeightPooh:= POOH_CriticalWtLP,
+			  ExitAutoPercent 	:= 5.0,
+			  ExitAutoTiming 	:= T#10S,
+			  SurfaceWeightLow 	=> surfaceWeightLow,
+			  SurfaceWeightHigh => surfaceWeightHigh,
+			  ReduceForce 		=> reduceForce,
+			  ExitAuto 			=> exitAuto);
+			  
+			  
+			  
+			  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	 ]]></ST>
+    </Implementation>
+    <LineIds Name="MAIN">
+      <LineId Id="623" Count="0" />
+      <LineId Id="711" Count="0" />
+      <LineId Id="61" Count="2" />
+      <LineId Id="1527" Count="1" />
+      <LineId Id="64" Count="0" />
+      <LineId Id="2085" Count="0" />
+      <LineId Id="1431" Count="0" />
+      <LineId Id="1937" Count="0" />
+      <LineId Id="1936" Count="0" />
+      <LineId Id="2084" Count="0" />
+      <LineId Id="431" Count="0" />
+      <LineId Id="2155" Count="0" />
+      <LineId Id="1994" Count="0" />
+      <LineId Id="1993" Count="0" />
+      <LineId Id="2351" Count="0" />
+      <LineId Id="2241" Count="2" />
+      <LineId Id="2247" Count="6" />
+      <LineId Id="2240" Count="0" />
+      <LineId Id="2225" Count="0" />
+      <LineId Id="1996" Count="0" />
+      <LineId Id="2005" Count="9" />
+      <LineId Id="2336" Count="0" />
+      <LineId Id="2339" Count="6" />
+      <LineId Id="2337" Count="0" />
+      <LineId Id="2004" Count="0" />
+      <LineId Id="2470" Count="0" />
+      <LineId Id="2469" Count="0" />
+      <LineId Id="2472" Count="0" />
+      <LineId Id="2499" Count="2" />
+      <LineId Id="2504" Count="4" />
+      <LineId Id="2510" Count="7" />
+      <LineId Id="2509" Count="0" />
+      <LineId Id="2503" Count="0" />
+      <LineId Id="2502" Count="0" />
+      <LineId Id="2473" Count="25" />
+      <LineId Id="2471" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

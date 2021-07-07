@@ -1,0 +1,135 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <POU Name="LinearInterpolation" Id="{91700c67-6229-486f-8c91-acc472bddb61}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK LinearInterpolation
+(* 
+The function block 'LinearInterpolation' represents two linear interpolations with
+up to 50 inierpolation points and can be used to generate two characteristic
+curves. 
+
+The interpolation points are determined via field variables (arrX[1]/arrY1[1] to
+arrX[n]/arrY1[n], and arrX[1]/arrY2[1] to arrX[n]/arrY2[n]).
+
+The input values for lrX[n+1] must always be at least 0.0000001 greater than
+values for lrX[n].
+
+The parameter for the number of interpolation points, usiNumOfElem, must be in 
+range 2..50.
+*)
+
+VAR_INPUT
+	lrX			: LREAL;					// Input value of the characteristic curve
+	arrX		: ARRAY[1..50] OF LREAL;	// Field with the X-values for the interpolation points
+	arrY1		: ARRAY[1..50] OF LREAL;	// Field with the Y1-values for the interpolation points
+	arrY2		: ARRAY[1..50] OF LREAL;	// Field with the Y2-values for the interpolation points
+	usiNumOfElem: USINT(2..50);				// Number of interpolation points, internally limited to values between 2 and 50	
+END_VAR
+VAR_OUTPUT
+	lrY1		: LREAL;	// Calculated output Y1 of the characteristic curve
+	lrY2		: LREAL;	// Calculated output Y2 of the characteristic curve
+	bCalc		: BOOL;		// Output is calculated
+	bErr		: BOOL;		// X-values sequence is wrong
+	bLowerLimit : BOOL;		// Input value is below lower range
+	bUpperLimit : BOOL;		// Input value is over upper range
+END_VAR
+VAR
+	i			: USINT;		
+	t			: LREAL;
+END_VAR
+VAR CONSTANT
+	INPUT_VALUE_MIN_DIFF	: LREAL := 0.0000001;	
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Check input array sequence error
+FOR i := 1 TO usiNumOfElem - 1 DO
+	IF (arrX[i + 1] - arrX[i]) <= INPUT_VALUE_MIN_DIFF THEN
+		bErr := TRUE;
+		EXIT;
+	ELSE
+		bErr := FALSE;
+	END_IF
+END_FOR
+
+IF bErr = FALSE THEN
+	// Get the points for interpolating 
+	IF lrX < arrX[1] THEN
+		// If X value is below first point, use first two points for interpolating 
+		bLowerLimit	:= TRUE;
+		bUpperLimit	:= FALSE;
+		bCalc  		:= TRUE;		
+		t 	 		:= (lrX - arrX[1])/(arrX[2] - arrX[1]);
+		lrY1 		:= (1 - t) * arrY1[1] + t * arrY1[2];
+		lrY2 		:= (1 - t) * arrY2[1] + t * arrY2[2];
+	ELSIF lrX > arrX[usiNumOfElem] THEN
+		// If X value is over last point, use last two points for interpolating
+		bLowerLimit := FALSE;
+		bUpperLimit := TRUE;
+		bCalc  		:= TRUE;		
+		t 	 		:= (lrX - arrX[usiNumOfElem - 1])/(arrX[usiNumOfElem] - arrX[usiNumOfElem - 1]);
+		lrY1 		:= (1 - t) * arrY1[usiNumOfElem - 1] + t * arrY1[usiNumOfElem];
+		lrY2 		:= (1 - t) * arrY2[usiNumOfElem - 1] + t * arrY2[usiNumOfElem];		
+	ELSE
+		bLowerLimit := FALSE;
+		bUpperLimit := FALSE;
+		FOR i := 1 TO usiNumOfElem - 1 DO
+			IF lrX = arrX[i] THEN
+				bCalc  	:= FALSE;
+				lrY1 := arrY1[i];
+				lrY2 := arrY2[i];
+				EXIT;
+			ELSIF lrX > arrX[i] AND lrX < arrX[i + 1] THEN
+				bCalc  	:= TRUE;
+				t 	 	:= (lrX - arrX[i])/(arrX[i + 1] - arrX[i]);
+				lrY1 	:= (1 - t) * arrY1[i] + t * arrY1[i + 1];
+				lrY2 	:= (1 - t) * arrY2[i] + t * arrY2[i + 1];
+				EXIT;
+			END_IF			
+		END_FOR
+		
+		IF lrX = arrX[usiNumOfElem] THEN
+			bCalc  	:= FALSE;
+			lrY1 := arrY1[usiNumOfElem];
+			lrY2 := arrY2[usiNumOfElem];
+		END_IF
+		
+	END_IF	
+	
+END_IF
+
+
+]]></ST>
+    </Implementation>
+    <LineIds Name="LinearInterpolation">
+      <LineId Id="57" Count="0" />
+      <LineId Id="50" Count="1" />
+      <LineId Id="55" Count="0" />
+      <LineId Id="60" Count="0" />
+      <LineId Id="109" Count="1" />
+      <LineId Id="56" Count="0" />
+      <LineId Id="52" Count="0" />
+      <LineId Id="119" Count="0" />
+      <LineId Id="59" Count="0" />
+      <LineId Id="122" Count="6" />
+      <LineId Id="151" Count="1" />
+      <LineId Id="129" Count="3" />
+      <LineId Id="154" Count="2" />
+      <LineId Id="153" Count="0" />
+      <LineId Id="135" Count="4" />
+      <LineId Id="157" Count="0" />
+      <LineId Id="140" Count="3" />
+      <LineId Id="158" Count="2" />
+      <LineId Id="146" Count="0" />
+      <LineId Id="161" Count="0" />
+      <LineId Id="147" Count="0" />
+      <LineId Id="149" Count="1" />
+      <LineId Id="165" Count="2" />
+      <LineId Id="162" Count="2" />
+      <LineId Id="120" Count="0" />
+      <LineId Id="168" Count="0" />
+      <LineId Id="121" Count="0" />
+      <LineId Id="73" Count="0" />
+      <LineId Id="102" Count="0" />
+      <LineId Id="79" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

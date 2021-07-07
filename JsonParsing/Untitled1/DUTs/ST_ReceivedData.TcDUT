@@ -1,0 +1,40 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.4">
+  <DUT Name="ST_ReceivedData" Id="{3125bf29-e483-4030-992d-221e6cd69f29}">
+    <Declaration><![CDATA[TYPE ST_ReceivedData :
+STRUCT
+	serialNumber 	: STRING(255);
+	batteryVoltage 	: STRING(255);
+	clickType		: STRING(255);
+	ProjectInfo 	: STRING(255);
+	ProjectName 	: STRING(255);
+	UTCUnixDateTime : STRING(255);
+	UpperPercent	: LREAL;
+	LowerPercent	: LREAL;
+// Unit Array
+	uDepth : STRING(255);
+	uRIH_SurfaceWt_CatastrophicBuckling : STRING(255);
+	uRIH_SurfaceWt_FrictionPlus : STRING(255);
+	uRIH_SurfaceWt : STRING(255);
+	uRIH_SurfaceWt_FrictionNgtv : STRING(255);
+	uPOOH_SurfaceWt_FrictionNgtv : STRING(255);
+	uPOOH_SurfaceWt : STRING(255);
+	uPOOH_SurfaceWt_FrictionPlus : STRING(255);
+	uPOOH_SurfaceWt_Yield : STRING(255);
+	
+//Friction Data Array
+	
+	Depth			: ARRAY [1..50] OF LREAL;
+	RIH_SurfaceWt_CatastrophicBuckling : ARRAY [1..50] OF LREAL;
+	RIH_SurfaceWt_FrictionPlus : ARRAY [1..50] OF LREAL;
+	RIH_SurfaceWt : ARRAY [1..50] OF LREAL;
+	RIH_SurfaceWt_FrictionNgtv : ARRAY [1..50] OF LREAL;
+	POOH_SurfaceWt_FrictionNgtv : ARRAY [1..50] OF LREAL;
+	POOH_SurfaceWt : ARRAY [1..50] OF LREAL;
+	POOH_SurfaceWt_FrictionPlus : ARRAY [1..50] OF LREAL;
+	POOH_SurfaceWt_Yield	: ARRAY [1..50] OF LREAL;
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

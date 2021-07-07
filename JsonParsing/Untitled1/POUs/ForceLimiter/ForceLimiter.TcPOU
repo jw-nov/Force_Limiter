@@ -1,0 +1,146 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <POU Name="ForceLimiter" Id="{774424b4-8005-423c-9542-3643bf3692c0}" SpecialFunc="None">
+    <Declaration><![CDATA[// Set job limits in terms of max snub and max pull
+FUNCTION_BLOCK PUBLIC ForceLimiter
+VAR_INPUT
+	Rih					: BOOL;		// Run in hole
+	Pooh				: BOOL;		// Pull out of hole
+	CruiseControl		: BOOL; 	// Cruise control mode
+	AutoMill			: BOOL;		// Auto mill mode
+	CerberusDataLoaded 	: BOOL;		// Cerberus data loaded
+	SurfaceWeight		: LREAL;	// Actual surface weight (lbs)	
+	MaxSnub				: LREAL; 	// Max Sbub (in negative lbs)
+	MaxPull				: LREAL;	// Max Pull (lbs)
+	CriticalWeightRih	: LREAL;	// RIH critical weight (Cerburus Catastrophic Buckling, in negative lbs)
+	CriticalWeightPooh	: LREAL;	// POOH critical weight ( Cerburus 80% pipe yield force, lbs)
+	ExitAutoPercent		: LREAL:= 5.0;		// If surface weight exceed the Max Snub/Pull value by %, then exit automation mode
+	ExitAutoTiming		: TIME := T#10S;	// If surface weight exceed the Max Snub/Pull value over an interval, then exit automation mode		
+END_VAR
+VAR_OUTPUT
+	SurfaceWeightLow	: BOOL;		// Warning if surface weight is below the Max Snub
+	SurfaceWeightHigh	: BOOL;		// Warning if surface weight is over the Max Pull	
+	ReduceForce			: BOOL;		// Fast stop while POOH, or run at slow speed while RIH
+	ExitAuto			: BOOL;		// Exit automation if surface weight exceed the Max Snub/Pull values by percentage or over an interval
+END_VAR
+VAR
+	t_SurfaceWtLowMaxSnub	: BOOL;	// Surface weight below Max Snub
+	t_SurfaceWtLowCritRih	: BOOL;	// Surface weight below Critical Weight RIH
+	t_SurfaceWtHighMaxPull	: BOOL;	// Surface weight over Max Pull
+	t_SurfaceWtHighCritPooh	: BOOL; // Surface weight over Critical Weight POOH
+	t_SurfaceWtLowMaxTimer	: TON;	// Surface weight below the Max Snub timer
+	t_SurfaceWtHighMaxTimer	: TON;	// Surface weight over the Max pull timer
+	t_SurfaceWtLowEnough	: BOOL;	// Surface weight exceed max snub by percentage or timing
+	t_SurfaceWtHighEnough	: BOOL;	// Surface weight exceed max pull by percentage or timing
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// Run in hole
+IF Rih = TRUE THEN
+	// Surface weight below Max Snub	
+	t_SurfaceWtLowMaxSnub := SurfaceWeight < MaxSnub;
+	t_SurfaceWtLowMaxTimer(IN := t_SurfaceWtLowMaxSnub, PT := ExitAutoTiming);
+	
+	// 	Surface weight below critical weight RIH
+	t_SurfaceWtLowCritRih := CerberusDataLoaded AND SurfaceWeight < CriticalWeightRih;
+	
+	// Warn surceface weight too low
+	SurfaceWeightLow := t_SurfaceWtLowMaxSnub OR t_SurfaceWtLowCritRih;
+	
+	// Automation disable tolerance surpassed
+	t_SurfaceWtLowEnough := SurfaceWeight < (1 + ExitAutoPercent / 100.0) * MaxSnub OR t_SurfaceWtLowMaxTimer.Q OR (MaxSnub = 0.0);
+	
+ELSE
+	SurfaceWeightLow := FALSE;
+	t_SurfaceWtLowMaxTimer(IN := FALSE);
+	t_SurfaceWtLowEnough := FALSE;
+END_IF
+
+// Pull out of hole
+IF Pooh = TRUE THEN
+	// Surface weight over Max pull
+	t_SurfaceWtHighMaxPull := SurfaceWeight > MaxPull;	
+	t_SurfaceWtHighMaxTimer(IN := t_SurfaceWtHighMaxPull, PT := ExitAutoTiming);
+	
+	// Surface weight over Critical weight POOH	
+	t_SurfaceWtHighCritPooh := CerberusDataLoaded AND SurfaceWeight > CriticalWeightPooh;
+	
+	// Warn surceface weight too high
+	SurfaceWeightHigh := t_SurfaceWtHighMaxPull OR t_SurfaceWtHighCritPooh;
+	
+	// Automation disable tolerance surpassed
+	t_SurfaceWtHighEnough := SurfaceWeight > (1 + ExitAutoPercent / 100.0) * MaxPull OR t_SurfaceWtHighMaxTimer.Q OR (MaxPull = 0.0);
+ELSE
+	SurfaceWeightHigh := FALSE;
+	t_SurfaceWtHighMaxTimer(IN := FALSE);
+	t_SurfaceWtHighEnough := FALSE;
+END_IF
+
+// Reduce force command and Disable automation
+IF CruiseControl = TRUE OR AutoMill = TRUE THEN
+	ReduceForce := SurfaceWeightLow OR SurfaceWeightHigh;
+	ExitAuto	:= t_SurfaceWtLowEnough OR t_SurfaceWtHighEnough;
+ELSE
+	ReduceForce := FALSE;
+	ExitAuto	:= FALSE;
+END_IF
+
+
+
+
+
+]]></ST>
+    </Implementation>
+    <LineIds Name="ForceLimiter">
+      <LineId Id="75" Count="0" />
+      <LineId Id="9" Count="0" />
+      <LineId Id="80" Count="0" />
+      <LineId Id="43" Count="0" />
+      <LineId Id="77" Count="0" />
+      <LineId Id="121" Count="0" />
+      <LineId Id="117" Count="0" />
+      <LineId Id="113" Count="0" />
+      <LineId Id="122" Count="0" />
+      <LineId Id="115" Count="0" />
+      <LineId Id="40" Count="0" />
+      <LineId Id="123" Count="0" />
+      <LineId Id="118" Count="0" />
+      <LineId Id="114" Count="0" />
+      <LineId Id="124" Count="0" />
+      <LineId Id="38" Count="0" />
+      <LineId Id="55" Count="0" />
+      <LineId Id="79" Count="0" />
+      <LineId Id="116" Count="0" />
+      <LineId Id="37" Count="0" />
+      <LineId Id="74" Count="0" />
+      <LineId Id="57" Count="3" />
+      <LineId Id="82" Count="0" />
+      <LineId Id="126" Count="0" />
+      <LineId Id="63" Count="0" />
+      <LineId Id="66" Count="0" />
+      <LineId Id="127" Count="0" />
+      <LineId Id="69" Count="0" />
+      <LineId Id="71" Count="0" />
+      <LineId Id="119" Count="0" />
+      <LineId Id="128" Count="0" />
+      <LineId Id="120" Count="0" />
+      <LineId Id="72" Count="1" />
+      <LineId Id="84" Count="0" />
+      <LineId Id="129" Count="0" />
+      <LineId Id="56" Count="0" />
+      <LineId Id="101" Count="1" />
+      <LineId Id="130" Count="0" />
+      <LineId Id="92" Count="0" />
+      <LineId Id="135" Count="0" />
+      <LineId Id="93" Count="0" />
+      <LineId Id="131" Count="0" />
+      <LineId Id="136" Count="0" />
+      <LineId Id="132" Count="1" />
+      <LineId Id="94" Count="0" />
+      <LineId Id="134" Count="0" />
+      <LineId Id="95" Count="0" />
+      <LineId Id="88" Count="0" />
+      <LineId Id="85" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

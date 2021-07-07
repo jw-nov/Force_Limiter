@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <DUT Name="ForceLimiterFsmState" Id="{d0a762da-cae6-484e-b06a-41a112a4ee36}">
+    <Declaration><![CDATA[TYPE ForceLimiterFsmState :
+(
+	FsmState_Idle := 0,
+	FsmState_Rih,
+	FsmState_Pooh,
+	NUM_FsmStates
+)BYTE;
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

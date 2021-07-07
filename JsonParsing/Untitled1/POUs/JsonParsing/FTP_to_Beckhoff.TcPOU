@@ -1,0 +1,184 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <POU Name="FTP_to_Beckhoff" Id="{72845b45-ed90-4a54-a937-e98ff08475a3}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FTP_to_Beckhoff
+(*create a user with the username "TestUser" AND the password"Test123" on the FTP Server. 
+If you set a rising edge at the variable "startstop", the downloading will be
+started. 
+
+Notice that the user "TestUser" has rights FOR reading AND writing.*)
+VAR
+	RisingEdge : R_TRIG;
+	startstop : BOOL;
+	state : BYTE;
+	FB_FTP_Open1 : FB_FTP_Open;
+	FB_FTP_FileDownload1 : FB_FTP_FileDownload;
+	FB_FTP_Close1 : FB_FTP_Close;
+	JsonParsInsit : FB_JsonDynDomParser;
+	//List_Param1 : ST_FTP_ConnInfo;
+	JSON_FileOpen : FB_FileOpen;
+	JSON_FileRead : FB_FileRead;
+	list : ARRAY [0..5] OF ST_FTP_ConnInfo;
+	FB_FTP_Info1 : FB_FTP_Info;
+	busy : BOOL;
+	err : BOOL;
+	errid : UDINT;
+	handle : T_HFTP;
+	progress : UDINT;
+	Samples: INT;
+	TF6300: INT;
+	cbList : UDINT;
+	Counter: UINT;
+	JSONArrayMember: FB_JsonDomParser;
+	TriggerJSONCall : BOOL := TRUE;
+END_VAR
+
+VAR_INPUT
+	//sNetID: T_AmsNetID;	
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[(***********************************************************************
+	Project:  [Template]
+	Copyright (c) 2016 NOV CTES
+	3770 Pollok Dr
+	Conroe, TX  77303
+	Phone: 936-777-6200
+	Programmer: Richard Koontz
+	
+	--------------------------------------------------------------------
+	This software is the confidential and proprietary information of
+	NOV CTES.("Confidential Information").  You shall not disclose such
+	Confidential Information and shall use it only in accordance with
+	the terms of the license agreement you entered into with NOV CTES.
+	--------------------------------------------------------------------
+	
+	Code Name: 	FTP Connection Info and Data Transfer 
+
+	Purpose:	
+	
+	Input values: NONE
+	Return Value: NONE
+	Revision: NONE
+*************************************************************************)
+
+// - At first a connection to a FTP Server will be opened with the function block FB_FTP_Open. 
+RisingEdge(CLK:= startstop);
+IF RisingEdge.Q THEN
+	state := 1;
+END_IF
+
+CASE state OF
+0:
+	;
+// Getting connection information with the FB_FTP_Info
+//Error Information
+	// - errid =33318: Requested action not taken. File unavailable (e.g., file not found, no access)
+	// - errid =6: Target port not found – ADS server is not started or is not reachable
+1:
+FB_FTP_Info1(
+	sNetID	:= '192.168.4.81.1.1', 				// sNetID is a string containing the AMS network identifier of the target device to which the ADS command is directed
+	pList:= ADR(list),       					// Pointer address to a variable of the type ST_FTP_ConnInfo. This variable can also be an array of the type ST_FTPConnInfo
+	cbList := SIZEOF(list),
+	bExecute:= TRUE, //startstop,						// The command is executed with the rising edge
+	tTimeout := T#15S,  						// States the time before the function is cancelled.
+	bBusy=> busy, 								// The command is in the process of being transmitted by ADS. No new command will be accepted as long as "bBusy" remains TRUE.
+	bError => err,								// Becomes TRUE, as soon as an error occurs.
+	nErrID => errid);							// Supplies the ErrorCode
+IF NOT busy AND NOT err THEN						 	//AND NOT err THEN
+	FB_FTP_Info1(bExecute:= FALSE);
+	State := 2;
+END_IF  
+
+
+// - At first a connection to a FTP Server will be opened with the function block FB_FTP_Open. 
+2:
+FB_FTP_Open1(
+	sNetID:= '192.168.4.81.1.1',   			// sNetID is a string containing the AMS network identifier of the target device to which the ADS command is directed
+	sHost:= '192.168.4.200',					//172.16.9.223 Is a string containing the IPv4 address of the FTP-Server
+	nPort:= 21,									// FTP port (default 21)
+	sUsername:= 'CAN-5CD9037LN9\TestUser', 		// CAN-5CD90910x6\ Username for the FTP Server authentication
+	sPassword:= 'Test123', 						// Password for the FTP Server authentication
+	bExecute:= TRUE,							// The command is executed with the rising edge.
+	tTimeout:= T#15S,							// States the time before the function is cancelled.
+	bBusy=> busy,
+	bError=> err,
+	nErrId=> errid,
+	hFTP=> handle);
+IF NOT busy AND NOT err THEN
+	FB_FTP_Open1(bExecute:= FALSE);
+	state := 3;
+END_IF
+
+// - After that the given file "\TestFolder\File1.txt" from the FTP Server will be downloaded with the function block FB_FTP_FileDownload.
+// - The following path "\Program Files\TestFile1.txt" is the place where the file will be stored on the ADS device.
+3:
+FB_FTP_FileDownload1(
+	sNetID:= '192.168.4.81.1.1',				// Is a string containing the AMS network identifier of the target device to which the ADS command is directed.
+	hFTP:= handle,								// Handle to a FTP Server
+	sSrcFile:= 'JSON_Testing.json',	// Source file which will be copied from the FTP Server
+	sDesFile:= 'C:\FTP Test\JSON_Testing.json', // Path and name of the destination file on the ADS device
+	bExecute:= TRUE,
+	tTimeout:= T#15S,
+	bBusy => busy,
+	bError => err,
+	nErrId => errid,
+	nProgress => progress);
+IF NOT busy AND NOT err THEN							//AND NOT err THEN
+	FB_FTP_FileDownload1(bExecute:= FALSE);
+	state := 4;
+END_IF
+
+// - At the end the connection to the FTP Server will be closed with the function block FB_FTP_Close.
+4:
+FB_FTP_Close1(
+	sNetID:= '192.168.4.81.1.1',			 	// Is a string containing the AMS network identifier of the target device to which the ADS command is directed.
+	hFTP:= handle,								// Handle to a FTP Server
+	bExecute:= TRUE,
+	tTimeout:= T#15S,
+	bBusy => busy,
+	bError => err,
+	nErrId => errid);
+IF NOT busy AND NOT err THEN 				//AND NOT err THEN
+	FB_FTP_Close1(bExecute:= FALSE);
+	state := 0;
+END_IF
+END_CASE
+
+
+
+
+
+
+
+]]></ST>
+    </Implementation>
+    <Property Name="Start" Id="{fcc6086d-6907-4098-a5c2-0a7b73d1adf7}">
+      <Declaration><![CDATA[PROPERTY PUBLIC Start : BOOL]]></Declaration>
+      <Set Name="Set" Id="{64f19f8a-839f-421b-970b-cb75376cfcce}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[startstop := Start;]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <LineIds Name="FTP_to_Beckhoff">
+      <LineId Id="39" Count="32" />
+      <LineId Id="376" Count="2" />
+      <LineId Id="72" Count="7" />
+      <LineId Id="183" Count="0" />
+      <LineId Id="81" Count="6" />
+      <LineId Id="418" Count="0" />
+      <LineId Id="88" Count="24" />
+      <LineId Id="340" Count="0" />
+      <LineId Id="114" Count="26" />
+      <LineId Id="302" Count="1" />
+      <LineId Id="148" Count="4" />
+      <LineId Id="9" Count="0" />
+    </LineIds>
+    <LineIds Name="FTP_to_Beckhoff.Start.Set">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>
