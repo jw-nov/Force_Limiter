@@ -4,7 +4,7 @@
     <Declaration><![CDATA[TYPE ForceLimiterFsmAction :
 (
 	FsmAction_None := stdNOV.FSM_ACTION_NONE,	
-	FsmAction_Warn,
+	FsmAction_Warn := 1,
 	FsmAction_Crit_Alarm,	
 	FsmAction_Clear_Warning,
 	FsmAction_Clear_Crit_Alarm,	

@@ -86,7 +86,9 @@ VAR
 	OverUpper  		: BOOL;		// Input value is over upper range
 	
 	// Force Limiter Controls
-	forceLimiter1		: ForceLimiterControls;
+	forceLimiter1	: ForceLimiterControls;
+	fl_fsm			: ForceLimiterFSM;
+			
 	// INPUT
 	rih					: BOOL;		// Run in hole
 	pooh				: BOOL;		// Pull out of hole
@@ -105,6 +107,11 @@ VAR
 	surfaceWeightHigh	: BOOL;		// Warning if surface weight is over the Max Pull	
 	reduceForce			: BOOL;		// Fast stop while POOH, or run at slow speed while RIH
 	exitAuto			: BOOL;		// Exit automation if surface weight exceed the Max Snub/Pull values by percentage or over an interval	
+	
+	warn				: BOOL;		// Approaching limit warn
+	alarm				: BOOL;     // Surpassed limit alarm
+	fsmError			: BOOL; 	// FSM error
+	
 END_VAR
 ]]></Declaration>
     <Implementation>
@@ -161,8 +168,9 @@ IF ParseJsonDoc1.numOfPoints >= 2 AND ParseJsonDoc1.numOfPoints <= 50 THEN
 END_IF
 
 // Implement Force Limiter Controls
+(*
 forceLimiter1(Rih  				:= rih,
-			  Pooh 				:=pooh,
+			  Pooh 				:= pooh,
 			  CruiseControl 	:= cruiseControl,
 			  AutoMill 			:= autoMill,
 			  CerberusDataLoaded:= JsonDataLoaded,
@@ -177,7 +185,29 @@ forceLimiter1(Rih  				:= rih,
 			  SurfaceWeightHigh => surfaceWeightHigh,
 			  ReduceForce 		=> reduceForce,
 			  ExitAuto 			=> exitAuto);
+*)
 			  
+// Implement Forcelimiter FSM
+fl_fsm( xEnable			:= TRUE,	
+		MaxSnub			:= maxSnub,
+		MaxPull			:= maxPull,
+		Rih				:= rih,
+		Pooh			:= pooh,
+	CriticalWeightRih	:= RIH_CriticalWtLP,
+	CriticalWeightPooh	:= POOH_CriticalWtLP,	
+	SurpassTimeout 		:= exitAutoTiming,	
+	SurpassThreshhold	:= exitAutoPercent,			
+	CerberusDataLoaded 	:= JsonDataLoaded,
+	SurfaceWeight		:= surfaceWeight,
+	Warn				=> warn,
+	CritAlarm			=> alarm,	
+	ReduceForce			=> reduceForce,
+	AutoDisable			=> exitAuto,
+	FsmError			=> fsmError);	
+	
+
+
+
 			  
 			  
 			  
@@ -237,11 +267,24 @@ forceLimiter1(Rih  				:= rih,
       <LineId Id="2004" Count="0" />
       <LineId Id="2470" Count="0" />
       <LineId Id="2469" Count="0" />
+      <LineId Id="2641" Count="0" />
       <LineId Id="2472" Count="0" />
       <LineId Id="2499" Count="2" />
       <LineId Id="2504" Count="4" />
       <LineId Id="2510" Count="7" />
+      <LineId Id="2643" Count="0" />
       <LineId Id="2509" Count="0" />
+      <LineId Id="2624" Count="0" />
+      <LineId Id="2632" Count="8" />
+      <LineId Id="2630" Count="0" />
+      <LineId Id="2651" Count="0" />
+      <LineId Id="2654" Count="0" />
+      <LineId Id="2653" Count="0" />
+      <LineId Id="2645" Count="0" />
+      <LineId Id="2661" Count="0" />
+      <LineId Id="2629" Count="0" />
+      <LineId Id="2625" Count="2" />
+      <LineId Id="2623" Count="0" />
       <LineId Id="2503" Count="0" />
       <LineId Id="2502" Count="0" />
       <LineId Id="2473" Count="25" />
