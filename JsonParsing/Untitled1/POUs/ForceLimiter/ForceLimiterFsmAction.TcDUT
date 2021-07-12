@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
+  <DUT Name="ForceLimiterFsmAction" Id="{0ac4eab1-eb97-4604-bf82-0524872cae92}">
+    <Declaration><![CDATA[TYPE ForceLimiterFsmAction :
+(
+	FsmAction_None := stdNOV.FSM_ACTION_NONE,	
+	FsmAction_Warn,
+	FsmAction_Crit_Alarm,	
+	FsmAction_Clear_Warning,
+	FsmAction_Clear_Crit_Alarm,	
+	NUM_FsmActions
+) BYTE;
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

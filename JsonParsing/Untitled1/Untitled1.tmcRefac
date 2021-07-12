@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Refactors>
+  <Renames>
+    <RenamedType>
+      <Type guid="774424b4-8005-423c-9542-3643bf3692c0">FORCELIMITER</Type>
+      <From>ForceLimiter</From>
+      <To>ForceLimiterControls</To>
+    </RenamedType>
+    <RenamedType>
+      <Type guid="0ac4eab1-eb97-4604-bf82-0524872cae92">FORCELIMITERACTION</Type>
+      <From>ForceLimiterAction</From>
+      <To>ForceLimiterFsmAction</To>
+    </RenamedType>
+  </Renames>
+</Refactors>

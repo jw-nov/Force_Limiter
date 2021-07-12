@@ -3,19 +3,377 @@
   <POU Name="ForceLimiterFSM" Id="{343a6fe0-52b1-49d8-9ae1-c1152df0e24c}" SpecialFunc="None">
     <Declaration><![CDATA[FUNCTION_BLOCK ForceLimiterFSM IMPLEMENTS i_actionHandler
 VAR_INPUT
+	xEnable				: BOOL;				// Enable inputs and FSM operation
+	MaxSnub				: LREAL; 			// Max Sbub (in negative lbs)
+	MaxPull				: LREAL;			// Max Pull (lbs)
+	Rih					: BOOL;				// Run in hole
+	Pooh				: BOOL;				// Pull out of hole
+	CriticalWeightRih	: LREAL;			// RIH critical weight (Cerburus Catastrophic Buckling, in negative lbs)
+	CriticalWeightPooh	: LREAL;			// POOH critical weight ( Cerburus 80% pipe yield force, lbs)	
+	SurpassTimeout 		: TIME  := T#10S;	// Limit surpass timeout value input
+	SurpassThreshhold	: LREAL := 3.0;		// Limit surpass threshhod in %	
+	CerberusDataLoaded 	: BOOL;				// Cerberus data loaded
+	SurfaceWeight		: LREAL;			// Actual surface weight (lbs)	
 END_VAR
 VAR_OUTPUT
+	Warn		: BOOL;		// Approaching limits warn
+	CritAlarm	: BOOL;		// Limits surpassed alarm	
+	ReduceForce	: BOOL;		// Fast stop while POOH, or run at slow speed while RIH
+	AutoDisable	: BOOL;		// Disable automation if surface weight exceed surpass limits
 END_VAR
 VAR
-	forceLimiter_FSM : fb_FSM;
+	(* Calcution mode *)
+	m_Pull			: BOOL; 	// Pull caluculation mode, weight is positive
+	m_SurfaceWeight : LREAL;	// Normalized surface weight
+	m_SurpassLimit	: LREAL;	// Surpassed limit
+	m_Limit			: LREAL;	// Limit
+	m_ApproachLimit : LREAL;	// Approaching limit
 	
+
+	(* Event Triggers *)	
+	m_EnableTrigger			: R_TRIG;	// Enable event trigger
+	m_SurpassTimeOutTrigger	: R_TRIG;	// Limit surpass timeout event trigger
+	m_SurpassTimer			: TON;		// Limit surpass timer used to detect timeout error
+
+
+	(* Finite State Machine *)
+	m_ForceLimiterFsmTable	: ARRAY[0..FSM_STATE_ARRAY_MAX, 0..FSM_EVENT_ARRAY_MAX, 0..FSM_ACTIONS_ARRAY_MAX] OF BYTE := [
+	(* FsmState_Error --------------------------------------------------------- *)
+	(*  Next State							Action								*)
+	
+		(* FsmEvent_Manual_Limits_Not_Set *)
+		FSM_EVENT_INVALID,					ForceLimiterFsmAction.FsmAction_None,
+		
+		(* FsmEvent_Manual_Limits_Set *)
+		FSM_EVENT_INVALID,					ForceLimiterFsmAction.FsmAction_None,
+		
+		(* FsmEvent_Approaching_Limits *)
+		FSM_EVENT_INVALID,					ForceLimiterFsmAction.FsmAction_None,
+		
+		(* FsmEvent_Not_Approaching_Limits *)
+		FSM_EVENT_INVALID,					ForceLimiterFsmAction.FsmAction_None,
+		
+		(* FsmEvent_Limit_Surpassed *)
+		FSM_EVENT_INVALID,					ForceLimiterFsmAction.FsmAction_None,
+		
+		(* FsmEvent_Limit_Not_Surpassed *)
+		FSM_EVENT_INVALID,					ForceLimiterFsmAction.FsmAction_None,	
+
+	(* FsmState_Off ----------------------------------------------------------- *)
+	(*  Next State							Action								*)
+	
+		(* FsmEvent_Manual_Limits_Not_Set *)
+		ForceLimiterFsmState.FsmState_Off,	ForceLimiterFsmAction.FsmAction_Crit_Alarm,
+		
+		(* FsmEvent_Manual_Limits_Set *)
+		ForceLimiterFsmState.FsmState_On,	ForceLimiterFsmAction.FsmAction_None,
+		
+		(* FsmEvent_Approaching_Limits *)
+		ForceLimiterFsmState.FsmState_Off,	ForceLimiterFsmAction.FsmAction_None,
+		
+		(* FsmEvent_Not_Approaching_Limits *)
+		ForceLimiterFsmState.FsmState_Off,	ForceLimiterFsmAction.FsmAction_None,
+		
+		(* FsmEvent_Limit_Surpassed *)
+		ForceLimiterFsmState.FsmState_Off,	ForceLimiterFsmAction.FsmAction_None,
+		
+		(* FsmEvent_Limit_Not_Surpassed *)
+		ForceLimiterFsmState.FsmState_Off,	ForceLimiterFsmAction.FsmAction_None,
+
+	(* FsmState_On ------------------------------------------------------------ *)
+	(*  Next State							Action								*)
+	
+		(* FsmEvent_Manual_Limits_Not_Set *)
+		ForceLimiterFsmState.FsmState_Off,	ForceLimiterFsmAction.FsmAction_None,
+		
+		(* FsmEvent_Manual_Limits_Set *)
+		ForceLimiterFsmState.FsmState_On,	ForceLimiterFsmAction.FsmAction_None,
+		
+		(* FsmEvent_Approaching_Limits *)
+		ForceLimiterFsmState.FsmState_On,	ForceLimiterFsmAction.FsmAction_Warn,
+		
+		(* FsmEvent_Not_Approaching_Limits *)
+		ForceLimiterFsmState.FsmState_On,	ForceLimiterFsmAction.FsmAction_Clear_Warning,
+		
+		(* FsmEvent_Limit_Surpassed *)
+		ForceLimiterFsmState.FsmState_On,	ForceLimiterFsmAction.FsmAction_Crit_Alarm,
+		
+		(* FsmEvent_Limit_Not_Surpassed *)
+		ForceLimiterFsmState.FsmState_On,	ForceLimiterFsmAction.FsmAction_Clear_Crit_Alarm	
+	];
+
+	m_ForceLimiterFSM : fb_FSM(	fsmId			:= ADR(	m_ForcelimiterFSM ),
+								stateTable		:= ADR( m_ForceLimiterFsmTable ),
+								actionHandler	:= THIS^,
+								numStates		:= ForcelimiterFsmState.NUM_FsmStates,
+								numEvents		:= ForceLimiterFsmEvent.NUM_FsmEvents,
+								initialState	:= ForcelimiterFsmState.FsmState_Off);
+								
+	m_FsmError			: BOOL;					// FSM error bit (TRUE - FSM Halted)
+	m_FsmErrorNum		: TFsmError;			// FSM error ENUM number
+	m_FsmCurrentState	: ForceLimiterFsmState;	// Current FSM state output
+	m_FsmLastState		: ForceLimiterFsmState; // Previous state used for debugging FSM errors
+	m_FsmLastEvent		: ForceLimiterFsmEvent; // Last triggered event output
+	m_FsmLastAction		: ForceLimiterFsmAction;// Last run action output	
+END_VAR
+VAR CONSTANT
+	FSM_NUM_EVENT_ACTIONS	: INT := 1;
+	FSM_NUM_STATES			: INT := ForceLimiterFsmState.NUM_FsmStates;
+	FSM_NUM_EVENTS			: INT := ForceLimiterFsmEvent.NUM_FsmEvents;
+	FSM_STATE_ARRAY_MAX		: INT := FSM_NUM_STATES - 1;
+	FSM_EVENT_ARRAY_MAX		: INT := FSM_NUM_EVENTS - 1;
+	FSM_ACTIONS_ARRAY_MAX	: INT := FSM_NUM_EVENT_ACTIONS;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// (* FSM *)
+
+m_ForceLimiterFSM( xEnable := xEnable, xError => m_FsmError, errorNum => m_FsmErrorNum);
+
+m_FsmCurrentState := m_ForceLimiterFSM.FSM_GetCurrentState();
+
+IF Pooh = TRUE AND Rih = FALSE THEN
+	m_Pull := TRUE;
+ELSIF Pooh = FALSE AND Rih = TRUE THEN
+	m_Pull := FALSE;
+END_IF
+
+// Pull operation 
+IF m_Pull = TRUE THEN
+	m_SurfaceWeight := SurfaceWeight;	
+	IF CerberusDataLoaded = TRUE THEN
+		m_Limit	:= MIN(MaxPull, CriticalWeightPooh);		
+	ELSE 
+		m_Limit	:= MaxPull;		
+	END_IF
+	m_SurpassLimit 	:= m_Limit * ( 1 + SurpassThreshhold / 100.0);		
+	m_ApproachLimit := m_Limit * ( 1 - SurpassThreshhold / 100.0);	
+
+// Snub operation	
+ELSE
+	m_SurfaceWeight := -1.0* SurfaceWeight;
+	IF CerberusDataLoaded = TRUE THEN
+		m_Limit	:= -1.0 * MAX(MaxSnub, CriticalWeightPooh);		
+	ELSE 
+		m_Limit	:= -1.0 * MaxSnub;		
+	END_IF
+	m_SurpassLimit 	:= -1.0 * MAX(MaxSnub, CriticalWeightPooh) * ( 1 + SurpassThreshhold / 100.0);		
+	m_ApproachLimit := -1.0 * MAX(MaxSnub, CriticalWeightPooh) * ( 1 - SurpassThreshhold / 100.0);	
+	
+END_IF
+
+// Timing if the surface weight is larger than the limit
+m_SurpassTimer(IN := (m_SurfaceWeight > m_Limit), PT := SurpassTimeout);
+
+
+// (* EVENT TRIGGER *)
+
+// Reset FSM to initialization state
+m_EnableTrigger(CLK := xEnable);
+IF (m_EnableTrigger.Q) THEN
+	m_ForceLimiterFSM.FSM_Reset();
+END_IF
+
+// Manual limits not set
+IF MaxSnub >= 0.0 OR MaxPull <= 0.0 THEN
+	m_ForceLimiterFSM.FSM_ProcessEvent(ForceLimiterFsmEvent.FsmEvent_Manual_Limits_Not_Set);
+END_IF
+
+// Manual limits set
+IF MaxSnub < 0.0 AND MaxPull > 0.0 THEN
+	m_ForceLimiterFSM.FSM_ProcessEvent(ForceLimiterFsmEvent.FsmEvent_Manual_Limits_Set);
+END_IF
+
+// Approaching the limit
+IF m_SurfaceWeight >= m_ApproachLimit THEN
+	m_ForceLimiterFSM.FSM_ProcessEvent(ForceLimiterFsmEvent.FsmEvent_Approaching_Limits);
+ELSE
+	m_ForceLimiterFSM.FSM_ProcessEvent(ForceLimiterFsmEvent.FsmEvent_Not_Approaching_Limits);
+END_IF
+
+// Surpassed the limit
+IF m_SurfaceWeight >= m_SurpassLimit OR m_SurpassTimer.Q THEN
+	m_ForceLimiterFSM.FSM_ProcessEvent(ForceLimiterFsmEvent.FsmEvent_Limit_Surpassed);
+ELSE
+	m_ForceLimiterFSM.FSM_ProcessEvent(ForceLimiterFsmEvent.FsmEvent_Limit_Not_Surpassed);
+END_IF
+
+
+
+
+
+
+
+
+
+
+
+
+]]></ST>
+    </Implementation>
+    <Method Name="ExcuteAction" Id="{065d9514-3328-412e-967a-dbc899eb9f38}">
+      <Declaration><![CDATA[METHOD ExcuteAction : BOOL
+VAR_INPUT
+	p_FSM			: POINTER TO fb_FSM;	// Pointer to the instatiation of the FSM object
+	currentAction	: TFsmAction;			// Current FSM action being processed
+	currentEvent	: TFsmEventDesc;		// Current FSM event being processed
 END_VAR
 ]]></Declaration>
-    <Implementation>
-      <ST><![CDATA[]]></ST>
-    </Implementation>
+      <Implementation>
+        <ST><![CDATA[CASE CurrentAction OF
+	
+	ForceLimiterFsmAction.FsmAction_None:	
+		// Return TRUE
+		ExcuteAction := TRUE;
+		
+	ForceLimiterFsmAction.FsmAction_Warn:	
+		// Generate warn, reduce speed
+		Warn		:= TRUE;		
+		ReduceForce	:= TRUE;		
+		
+		// Return TRUE
+		ExcuteAction := TRUE;
+	
+	ForceLimiterFsmAction.FsmAction_Crit_Alarm:
+		// Generate critical alarm, disable cruise control and auto mill
+		CritAlarm	:= TRUE;		
+		AutoDisable	:= TRUE;		
+
+		// Return TRUE
+		ExcuteAction := TRUE;		
+	
+	ForceLimiterFsmAction.FsmAction_Clear_Warning:
+		// Clear warning, reduce speed
+		Warn		:= FALSE;		
+		ReduceForce	:= FALSE;	
+		
+	ForceLimiterFsmAction.FsmAction_Clear_Crit_Alarm:
+		// Clear critical alarm, enable cruise control and auto mill
+		CritAlarm	:= FALSE;		
+		AutoDisable	:= FALSE;		
+
+		// Return TRUE
+		ExcuteAction := TRUE;		
+	
+	FSM_ACTION_UNEXPECTED_EVENT:
+		// Do action unexpected event
+		p_FSM^.FSM_ASSERT(FALSE, TFsmError.FSM_INVALID_ACTION);
+		
+		// Return FALSE
+		ExcuteAction := FALSE;
+		
+	FSM_ACTION_ERROR_EVENT:
+		// Do action error event
+		m_EnableTrigger(CLK := FALSE);
+		
+		// Return FALSE
+		ExcuteAction := FALSE;
+
+ELSE
+	// Error trap - Unknow action
+	p_FSM^.FSM_ASSERT(FALSE, TFsmError.FSM_INVALID_ACTION);
+	
+	// Return FALSE
+	ExcuteAction := FALSE;
+
+END_CASE
+
+m_FsmLastState	:= p_FSM^.FSM_GetPreviousState();
+m_FsmLastEvent	:= currentEvent.event;
+m_FsmLastAction	:= currentAction;	]]></ST>
+      </Implementation>
+    </Method>
     <LineIds Name="ForceLimiterFSM">
       <LineId Id="9" Count="0" />
+      <LineId Id="122" Count="0" />
+      <LineId Id="121" Count="0" />
+      <LineId Id="124" Count="0" />
+      <LineId Id="123" Count="0" />
+      <LineId Id="286" Count="1" />
+      <LineId Id="294" Count="0" />
+      <LineId Id="296" Count="1" />
+      <LineId Id="295" Count="0" />
+      <LineId Id="311" Count="0" />
+      <LineId Id="288" Count="1" />
+      <LineId Id="298" Count="0" />
+      <LineId Id="303" Count="1" />
+      <LineId Id="306" Count="1" />
+      <LineId Id="305" Count="0" />
+      <LineId Id="336" Count="0" />
+      <LineId Id="338" Count="0" />
+      <LineId Id="312" Count="0" />
+      <LineId Id="302" Count="0" />
+      <LineId Id="300" Count="1" />
+      <LineId Id="320" Count="1" />
+      <LineId Id="323" Count="1" />
+      <LineId Id="313" Count="0" />
+      <LineId Id="341" Count="0" />
+      <LineId Id="339" Count="0" />
+      <LineId Id="343" Count="0" />
+      <LineId Id="299" Count="0" />
+      <LineId Id="344" Count="0" />
+      <LineId Id="290" Count="1" />
+      <LineId Id="285" Count="0" />
+      <LineId Id="135" Count="0" />
+      <LineId Id="125" Count="0" />
+      <LineId Id="267" Count="0" />
+      <LineId Id="242" Count="0" />
+      <LineId Id="136" Count="3" />
+      <LineId Id="244" Count="0" />
+      <LineId Id="243" Count="0" />
+      <LineId Id="268" Count="2" />
+      <LineId Id="272" Count="3" />
+      <LineId Id="271" Count="0" />
+      <LineId Id="345" Count="0" />
+      <LineId Id="277" Count="0" />
+      <LineId Id="346" Count="1" />
+      <LineId Id="349" Count="1" />
+      <LineId Id="348" Count="0" />
+      <LineId Id="368" Count="0" />
+      <LineId Id="352" Count="1" />
+      <LineId Id="364" Count="0" />
+      <LineId Id="366" Count="1" />
+      <LineId Id="365" Count="0" />
+      <LineId Id="354" Count="9" />
+      <LineId Id="351" Count="0" />
+      <LineId Id="278" Count="0" />
+      <LineId Id="276" Count="0" />
+    </LineIds>
+    <LineIds Name="ForceLimiterFSM.ExcuteAction">
+      <LineId Id="5" Count="0" />
+      <LineId Id="9" Count="0" />
+      <LineId Id="16" Count="0" />
+      <LineId Id="18" Count="1" />
+      <LineId Id="36" Count="2" />
+      <LineId Id="43" Count="0" />
+      <LineId Id="45" Count="0" />
+      <LineId Id="39" Count="0" />
+      <LineId Id="46" Count="0" />
+      <LineId Id="48" Count="0" />
+      <LineId Id="20" Count="2" />
+      <LineId Id="34" Count="0" />
+      <LineId Id="33" Count="0" />
+      <LineId Id="12" Count="1" />
+      <LineId Id="23" Count="0" />
+      <LineId Id="29" Count="0" />
+      <LineId Id="35" Count="0" />
+      <LineId Id="50" Count="1" />
+      <LineId Id="49" Count="0" />
+      <LineId Id="30" Count="0" />
+      <LineId Id="52" Count="5" />
+      <LineId Id="31" Count="1" />
+      <LineId Id="59" Count="6" />
+      <LineId Id="67" Count="4" />
+      <LineId Id="74" Count="0" />
+      <LineId Id="24" Count="0" />
+      <LineId Id="14" Count="0" />
+      <LineId Id="58" Count="0" />
+      <LineId Id="72" Count="1" />
+      <LineId Id="15" Count="0" />
+      <LineId Id="75" Count="0" />
+      <LineId Id="11" Count="0" />
+      <LineId Id="10" Count="0" />
+      <LineId Id="77" Count="2" />
+      <LineId Id="76" Count="0" />
     </LineIds>
   </POU>
 </TcPlcObject>

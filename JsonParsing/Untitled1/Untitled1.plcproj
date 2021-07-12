@@ -23,10 +23,10 @@
     <Compile Include="PlcTask.TcTTO">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="POUs\ForceLimiter\ForceLimiter.TcPOU">
+    <Compile Include="POUs\ForceLimiter\ForceLimiterControls.TcPOU">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="POUs\ForceLimiter\ForceLimiterAction.TcDUT">
+    <Compile Include="POUs\ForceLimiter\ForceLimiterFsmAction.TcDUT">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="POUs\ForceLimiter\ForceLimiterFSM.TcPOU">

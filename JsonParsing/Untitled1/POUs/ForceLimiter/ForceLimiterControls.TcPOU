@@ -1,8 +1,8 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.6">
-  <POU Name="ForceLimiter" Id="{774424b4-8005-423c-9542-3643bf3692c0}" SpecialFunc="None">
+  <POU Name="ForceLimiterControls" Id="{774424b4-8005-423c-9542-3643bf3692c0}" SpecialFunc="None">
     <Declaration><![CDATA[// Set job limits in terms of max snub and max pull
-FUNCTION_BLOCK PUBLIC ForceLimiter
+FUNCTION_BLOCK PUBLIC ForceLimiterControls
 VAR_INPUT
 	Rih					: BOOL;		// Run in hole
 	Pooh				: BOOL;		// Pull out of hole
@@ -91,7 +91,7 @@ END_IF
 
 ]]></ST>
     </Implementation>
-    <LineIds Name="ForceLimiter">
+    <LineIds Name="ForceLimiterControls">
       <LineId Id="75" Count="0" />
       <LineId Id="9" Count="0" />
       <LineId Id="80" Count="0" />

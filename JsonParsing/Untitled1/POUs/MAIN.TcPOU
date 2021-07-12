@@ -86,7 +86,7 @@ VAR
 	OverUpper  		: BOOL;		// Input value is over upper range
 	
 	// Force Limiter Controls
-	forceLimiter1		: ForceLimiter;
+	forceLimiter1		: ForceLimiterControls;
 	// INPUT
 	rih					: BOOL;		// Run in hole
 	pooh				: BOOL;		// Pull out of hole
